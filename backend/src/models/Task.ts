@@ -4,11 +4,15 @@ export interface ITask extends Document {
   title: string;
   description: string;
   estimatedTime: number;
-  difficulty: 'easy' | 'medium' | 'hard';
   status: 'pending' | 'completed' | 'skipped';
   dueDate: Date;
   completedAt?: Date;
   goalId: mongoose.Types.ObjectId;
+  successCriteria: string[];
+  prerequisites: string[];
+  notes?: string;
+  dailyFocus: string;
+  resources?: string[];
 }
 
 const TaskSchema = new Schema<ITask>(
@@ -25,11 +29,7 @@ const TaskSchema = new Schema<ITask>(
     estimatedTime: {
       type: Number,
       required: true,
-    },
-    difficulty: {
-      type: String,
-      required: true,
-      enum: ['easy', 'medium', 'hard'],
+      default: 60, // Default to 60 minutes (1 hour)
     },
     status: {
       type: String,
@@ -48,6 +48,28 @@ const TaskSchema = new Schema<ITask>(
       type: Schema.Types.ObjectId,
       ref: 'Goal',
       required: true,
+    },
+    successCriteria: {
+      type: [String],
+      required: true,
+      default: [],
+    },
+    prerequisites: {
+      type: [String],
+      required: true,
+      default: [],
+    },
+    notes: {
+      type: String,
+    },
+    dailyFocus: {
+      type: String,
+      required: true,
+      description: 'The specific topic or concept to focus on for this daily task',
+    },
+    resources: {
+      type: [String],
+      description: 'Links to relevant resources, articles, or practice problems',
     },
   },
   {

@@ -1,18 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { Card, List, Button, Progress, Typography, Space, Tag } from 'antd';
-import { CheckCircleOutlined, ClockCircleOutlined } from '@ant-design/icons';
+import { Card, List, Button, Typography, Space, Tag, Collapse, Modal } from 'antd';
+import { CheckCircleOutlined, ClockCircleOutlined, InfoCircleOutlined, BookOutlined, FileTextOutlined, LinkOutlined, DeleteOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 
-const { Title, Text } = Typography;
+const { Title, Text, Paragraph } = Typography;
+const { Panel } = Collapse;
+const { confirm } = Modal;
 
 interface DailyTask {
   _id: string;
   title: string;
   description: string;
   estimatedTime: number;
-  difficulty: 'easy' | 'medium' | 'hard';
   status: 'pending' | 'completed' | 'skipped';
   dueDate: string;
   completedAt?: string;
+  successCriteria: string[];
+  prerequisites: string[];
+  notes?: string;
+  dailyFocus: string;
+  resources?: string[];
 }
 
 interface DailyTasksProps {
@@ -23,15 +29,19 @@ const DailyTasks: React.FC<DailyTasksProps> = ({ goalId }) => {
   const [tasks, setTasks] = useState<DailyTask[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const fetchTasks = async () => {
-    try {
-      const response = await fetch(`http://localhost:3001/api/goals/${goalId}/tasks`);
-      const data = await response.json();
-      setTasks(data);
-    } catch (error) {
-      console.error('Error fetching tasks:', error);
-    }
-  };
+  useEffect(() => {
+    const fetchTasks = async () => {
+      try {
+        const response = await fetch(`http://localhost:3001/api/goals/${goalId}/tasks`);
+        const data = await response.json();
+        setTasks(data);
+      } catch (error) {
+        console.error('Error fetching tasks:', error);
+      }
+    };
+
+    fetchTasks();
+  }, [goalId]);
 
   const generateTasks = async () => {
     setLoading(true);
@@ -66,30 +76,43 @@ const DailyTasks: React.FC<DailyTasksProps> = ({ goalId }) => {
     }
   };
 
-  useEffect(() => {
-    fetchTasks();
-  }, [goalId]);
+  const handleDeleteTask = async (taskId: string) => {
+    confirm({
+      title: 'Are you sure you want to delete this task?',
+      icon: <ExclamationCircleOutlined />,
+      content: 'This action cannot be undone.',
+      okText: 'Yes',
+      okType: 'danger',
+      cancelText: 'No',
+      onOk: async () => {
+        try {
+          const response = await fetch(`http://localhost:3001/api/goals/tasks/${taskId}`, {
+            method: 'DELETE',
+          });
 
-  const getDifficultyColor = (difficulty: string) => {
-    switch (difficulty) {
-      case 'easy': return 'green';
-      case 'medium': return 'orange';
-      case 'hard': return 'red';
-      default: return 'blue';
-    }
+          if (!response.ok) {
+            throw new Error('Failed to delete task');
+          }
+
+          setTasks(tasks.filter(task => task._id !== taskId));
+        } catch (error) {
+          console.error('Error deleting task:', error);
+        }
+      },
+    });
   };
 
   return (
     <Card>
       <Space direction="vertical" style={{ width: '100%' }}>
         <Space style={{ justifyContent: 'space-between', width: '100%' }}>
-          <Title level={4}>Daily Tasks</Title>
+          <Title level={4}>Daily Practice Sessions</Title>
           <Button 
             type="primary" 
             onClick={generateTasks} 
             loading={loading}
           >
-            Generate Tasks
+            Generate Practice Plan
           </Button>
         </Space>
 
@@ -105,13 +128,19 @@ const DailyTasks: React.FC<DailyTasksProps> = ({ goalId }) => {
                       icon={<CheckCircleOutlined />}
                       onClick={() => updateTaskStatus(task._id, 'completed')}
                     >
-                      Complete
+                      Complete Session
                     </Button>
                     <Button 
                       onClick={() => updateTaskStatus(task._id, 'skipped')}
                     >
                       Skip
                     </Button>
+                    <Button
+                      type="text"
+                      danger
+                      icon={<DeleteOutlined />}
+                      onClick={() => handleDeleteTask(task._id)}
+                    />
                   </Space>
                 )
               ]}
@@ -122,15 +151,92 @@ const DailyTasks: React.FC<DailyTasksProps> = ({ goalId }) => {
                     <Text delete={task.status !== 'pending'}>
                       {task.title}
                     </Text>
-                    <Tag color={getDifficultyColor(task.difficulty)}>
-                      {task.difficulty}
-                    </Tag>
                     <Tag icon={<ClockCircleOutlined />}>
                       {task.estimatedTime} min
                     </Tag>
                   </Space>
                 }
-                description={task.description}
+                description={
+                  <Space direction="vertical" style={{ width: '100%' }}>
+                    <Paragraph>
+                      <Text strong>Today's Focus: </Text>
+                      {task.dailyFocus}
+                    </Paragraph>
+                    <Paragraph>{task.description}</Paragraph>
+                    <Collapse ghost>
+                      <Panel 
+                        header={
+                          <Space>
+                            <InfoCircleOutlined />
+                            <Text>Session Details</Text>
+                          </Space>
+                        } 
+                        key="1"
+                      >
+                        {task.resources && task.resources.length > 0 && (
+                          <Space direction="vertical" style={{ marginBottom: 16 }}>
+                            <Text strong>Practice Problems & Resources:</Text>
+                            <List
+                              size="small"
+                              dataSource={task.resources}
+                              renderItem={item => (
+                                <List.Item>
+                                  <Space>
+                                    <LinkOutlined />
+                                    <Text>{item}</Text>
+                                  </Space>
+                                </List.Item>
+                              )}
+                            />
+                          </Space>
+                        )}
+                        {task.prerequisites.length > 0 && (
+                          <Space direction="vertical" style={{ marginBottom: 16 }}>
+                            <Text strong>Concepts to Review:</Text>
+                            <List
+                              size="small"
+                              dataSource={task.prerequisites}
+                              renderItem={item => (
+                                <List.Item>
+                                  <Space>
+                                    <BookOutlined />
+                                    <Text>{item}</Text>
+                                  </Space>
+                                </List.Item>
+                              )}
+                            />
+                          </Space>
+                        )}
+                        {task.successCriteria.length > 0 && (
+                          <Space direction="vertical" style={{ marginBottom: 16 }}>
+                            <Text strong>Success Criteria:</Text>
+                            <List
+                              size="small"
+                              dataSource={task.successCriteria}
+                              renderItem={item => (
+                                <List.Item>
+                                  <Space>
+                                    <CheckCircleOutlined />
+                                    <Text>{item}</Text>
+                                  </Space>
+                                </List.Item>
+                              )}
+                            />
+                          </Space>
+                        )}
+                        {task.notes && (
+                          <Space direction="vertical">
+                            <Text strong>Tips & Strategies:</Text>
+                            <Paragraph>
+                              <FileTextOutlined style={{ marginRight: 8 }} />
+                              {task.notes}
+                            </Paragraph>
+                          </Space>
+                        )}
+                      </Panel>
+                    </Collapse>
+                  </Space>
+                }
               />
             </List.Item>
           )}

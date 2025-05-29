@@ -1,267 +1,186 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Container,
-  Grid,
-  Paper,
-  Typography,
-  Box,
-  CircularProgress,
-  List,
-  ListItem,
-  ListItemText,
-  Divider,
-  Button,
-  Chip,
-} from '@mui/material';
-import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
-import { CheckCircleOutlined, ClockCircleOutlined } from '@ant-design/icons';
+import { Card, List, Button, Typography, Space, Modal, message, Tabs } from 'antd';
+import { PlusOutlined, DeleteOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
+import GoalForm from './GoalForm.tsx';
+import DailyTasks from './DailyTasks.tsx';
+import moment from 'moment';
 
-interface DailyTask {
-  _id: string;
-  title: string;
-  description: string;
-  estimatedTime: number;
-  difficulty: 'easy' | 'medium' | 'hard';
-  status: 'pending' | 'completed' | 'skipped';
-  dueDate: string;
-  completedAt?: string;
-}
+const { Title, Text } = Typography;
+const { confirm } = Modal;
+const { TabPane } = Tabs;
 
 interface Goal {
   _id: string;
   title: string;
   description: string;
-  progress: number;
+  currentLevel: string;
+  specificAreas: string;
   dailyTime: number;
   startDate: string;
   endDate: string;
-  difficulty: string;
-  tasks?: DailyTask[];
+  tasks: string[];
 }
 
 const Dashboard: React.FC = () => {
-  const navigate = useNavigate();
   const [goals, setGoals] = useState<Goal[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [generatingTasks, setGeneratingTasks] = useState<{ [key: string]: boolean }>({});
+  const [loading, setLoading] = useState(false);
+  const [isModalVisible, setIsModalVisible] = useState(false);
 
-  const fetchData = async () => {
+  const fetchGoals = async () => {
     try {
-      setLoading(true);
-      setError(null);
-      
-      const response = await axios.get('http://localhost:3001/api/goals');
-      console.log('Fetched goals:', response.data);
-      setGoals(response.data);
+      const response = await fetch('http://localhost:3001/api/goals');
+      const data = await response.json();
+      setGoals(data);
     } catch (error) {
-      console.error('Error fetching dashboard data:', error);
-      setError('Failed to load dashboard data. Please try again.');
+      console.error('Error fetching goals:', error);
+      message.error('Failed to fetch goals');
+    }
+  };
+
+  useEffect(() => {
+    fetchGoals();
+  }, []);
+
+  const handleCreateGoal = async (values: any) => {
+    setLoading(true);
+    try {
+      const response = await fetch('http://localhost:3001/api/goals', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(values),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create goal');
+      }
+
+      const newGoal = await response.json();
+      setGoals([...goals, newGoal]);
+      setIsModalVisible(false);
+      message.success('Goal created successfully');
+    } catch (error) {
+      console.error('Error creating goal:', error);
+      message.error('Failed to create goal');
     } finally {
       setLoading(false);
     }
   };
 
-  const generateTasks = async (goalId: string) => {
-    try {
-      setGeneratingTasks(prev => ({ ...prev, [goalId]: true }));
-      const response = await axios.post(`http://localhost:3001/api/goals/${goalId}/generate-tasks`);
-      
-      // Update the goals state with the new tasks
-      setGoals(prevGoals => 
-        prevGoals.map(goal => 
-          goal._id === goalId 
-            ? { ...goal, tasks: response.data }
-            : goal
-        )
-      );
-    } catch (error) {
-      console.error('Error generating tasks:', error);
-      setError('Failed to generate tasks. Please try again.');
-    } finally {
-      setGeneratingTasks(prev => ({ ...prev, [goalId]: false }));
-    }
-  };
+  const handleDeleteGoal = async (goalId: string) => {
+    confirm({
+      title: 'Are you sure you want to delete this goal?',
+      icon: <ExclamationCircleOutlined />,
+      content: 'This will also delete all associated tasks.',
+      okText: 'Yes',
+      okType: 'danger',
+      cancelText: 'No',
+      onOk: async () => {
+        try {
+          const response = await fetch(`http://localhost:3001/api/goals/${goalId}`, {
+            method: 'DELETE',
+          });
 
-  const updateTaskStatus = async (taskId: string, status: 'completed' | 'skipped') => {
-    try {
-      const response = await axios.patch(`http://localhost:3001/api/goals/tasks/${taskId}`, {
-        status
-      });
-      
-      // Update the goals state with the new task status
-      setGoals(prevGoals => 
-        prevGoals.map(goal => ({
-          ...goal,
-          tasks: goal.tasks?.map(task => 
-            task._id === taskId ? response.data : task
-          )
-        }))
-      );
-    } catch (error) {
-      console.error('Error updating task:', error);
-    }
-  };
+          if (!response.ok) {
+            throw new Error('Failed to delete goal');
+          }
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  if (loading) {
-    return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
-        <CircularProgress />
-      </Box>
-    );
-  }
-
-  const getDifficultyColor = (difficulty: string) => {
-    switch (difficulty) {
-      case 'easy': return 'success';
-      case 'medium': return 'warning';
-      case 'hard': return 'error';
-      default: return 'default';
-    }
+          setGoals(goals.filter(goal => goal._id !== goalId));
+          message.success('Goal deleted successfully');
+        } catch (error) {
+          console.error('Error deleting goal:', error);
+          message.error('Failed to delete goal');
+        }
+      },
+    });
   };
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 4 }}>
-      <Grid container spacing={3}>
-        <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Typography variant="h4" gutterBottom>
-            Dashboard
-          </Typography>
+    <div style={{ padding: '24px' }}>
+      <Space direction="vertical" size="large" style={{ width: '100%' }}>
+        <Space style={{ justifyContent: 'space-between', width: '100%' }}>
+          <Title level={2}>Today's Practice Plan</Title>
           <Button
-            variant="contained"
-            color="primary"
-            onClick={() => navigate('/create-goal')}
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => setIsModalVisible(true)}
           >
             Create New Goal
           </Button>
-        </Grid>
+        </Space>
 
-        {error && (
-          <Grid item xs={12}>
-            <Paper elevation={3} sx={{ p: 2, bgcolor: 'error.light' }}>
-              <Typography color="error">{error}</Typography>
-            </Paper>
-          </Grid>
-        )}
-
-        {goals.map((goal) => (
-          <Grid item xs={12} key={goal._id}>
-            <Paper elevation={3} sx={{ p: 3 }}>
-              <Typography variant="h5" gutterBottom>
-                {goal.title}
-              </Typography>
-              <Typography variant="body1" color="text.secondary" paragraph>
-                {goal.description}
-              </Typography>
-              
-              <Box sx={{ mb: 2 }}>
-                <Chip 
-                  icon={<ClockCircleOutlined />}
-                  label={`Daily Time: ${goal.dailyTime} minutes`}
-                  sx={{ mr: 1 }}
-                />
-                <Chip 
-                  label={`Difficulty: ${goal.difficulty}`}
-                  color={getDifficultyColor(goal.difficulty)}
-                  sx={{ mr: 1 }}
-                />
-                <Chip 
-                  label={`Timeline: ${new Date(goal.startDate).toLocaleDateString()} - ${new Date(goal.endDate).toLocaleDateString()}`}
-                />
-              </Box>
-
-              <Typography variant="h6" gutterBottom>
-                Daily Tasks
-              </Typography>
-              
-              {goal.tasks && goal.tasks.length > 0 ? (
-                <List>
-                  {goal.tasks.map((task) => (
-                    <ListItem
-                      key={task._id}
-                      secondaryAction={
-                        task.status === 'pending' && (
-                          <Box>
-                            <Button
-                              variant="contained"
-                              color="success"
-                              size="small"
-                              onClick={() => updateTaskStatus(task._id, 'completed')}
-                              sx={{ mr: 1 }}
-                            >
-                              Complete
-                            </Button>
-                            <Button
-                              variant="outlined"
-                              size="small"
-                              onClick={() => updateTaskStatus(task._id, 'skipped')}
-                            >
-                              Skip
-                            </Button>
-                          </Box>
-                        )
-                      }
-                    >
-                      <ListItemText
-                        primary={
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <Typography
-                              sx={{
-                                textDecoration: task.status !== 'pending' ? 'line-through' : 'none',
-                                color: task.status !== 'pending' ? 'text.secondary' : 'text.primary'
-                              }}
-                            >
-                              {task.title}
-                            </Typography>
-                            <Chip
-                              label={task.difficulty}
-                              size="small"
-                              color={getDifficultyColor(task.difficulty)}
-                            />
-                            <Chip
-                              icon={<ClockCircleOutlined />}
-                              label={`${task.estimatedTime} min`}
-                              size="small"
-                            />
-                          </Box>
-                        }
-                        secondary={task.description}
+        <Tabs defaultActiveKey="today">
+          <TabPane tab="Today's Tasks" key="today">
+            {goals.map(goal => (
+              <Card
+                key={goal._id}
+                title={
+                  <Space style={{ justifyContent: 'space-between', width: '100%' }}>
+                    <Text strong>{goal.title}</Text>
+                    <Button
+                      type="text"
+                      danger
+                      icon={<DeleteOutlined />}
+                      onClick={() => handleDeleteGoal(goal._id)}
+                    />
+                  </Space>
+                }
+                style={{ marginBottom: '16px' }}
+              >
+                <Space direction="vertical" style={{ width: '100%' }}>
+                  <Text>{goal.description}</Text>
+                  <Text type="secondary">Daily Practice Time: {goal.dailyTime} minutes</Text>
+                  <DailyTasks goalId={goal._id} />
+                </Space>
+              </Card>
+            ))}
+          </TabPane>
+          <TabPane tab="All Goals" key="all">
+            <List
+              dataSource={goals}
+              renderItem={goal => (
+                <Card
+                  title={
+                    <Space style={{ justifyContent: 'space-between', width: '100%' }}>
+                      <Text strong>{goal.title}</Text>
+                      <Button
+                        type="text"
+                        danger
+                        icon={<DeleteOutlined />}
+                        onClick={() => handleDeleteGoal(goal._id)}
                       />
-                    </ListItem>
-                  ))}
-                </List>
-              ) : (
-                <Box sx={{ textAlign: 'center', py: 2 }}>
-                  <Typography color="text.secondary" gutterBottom>
-                    No tasks available.
-                  </Typography>
-                  <Button
-                    variant="contained"
-                    color="primary"
-                    onClick={() => generateTasks(goal._id)}
-                    disabled={generatingTasks[goal._id]}
-                  >
-                    {generatingTasks[goal._id] ? (
-                      <>
-                        <CircularProgress size={20} sx={{ mr: 1 }} />
-                        Generating Tasks...
-                      </>
-                    ) : (
-                      'Generate Tasks'
-                    )}
-                  </Button>
-                </Box>
+                    </Space>
+                  }
+                  style={{ marginBottom: '16px' }}
+                >
+                  <Space direction="vertical" style={{ width: '100%' }}>
+                    <Text>{goal.description}</Text>
+                    <Text type="secondary">Daily Practice Time: {goal.dailyTime} minutes</Text>
+                    <Text type="secondary">
+                      Start Date: {moment(goal.startDate).format('MMMM D, YYYY')}
+                    </Text>
+                    <Text type="secondary">
+                      End Date: {moment(goal.endDate).format('MMMM D, YYYY')}
+                    </Text>
+                  </Space>
+                </Card>
               )}
-            </Paper>
-          </Grid>
-        ))}
-      </Grid>
-    </Container>
+            />
+          </TabPane>
+        </Tabs>
+      </Space>
+
+      <Modal
+        title="Create New Goal"
+        open={isModalVisible}
+        onCancel={() => setIsModalVisible(false)}
+        footer={null}
+        width={800}
+      >
+        <GoalForm onSubmit={handleCreateGoal} loading={loading} />
+      </Modal>
+    </div>
   );
 };
 

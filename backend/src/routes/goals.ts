@@ -37,7 +37,7 @@ router.post('/', async (req, res) => {
     console.log('Received goal data:', req.body);
     
     // Validate required fields
-    const requiredFields = ['title', 'description', 'dailyTime', 'startDate', 'endDate', 'difficulty'];
+    const requiredFields = ['title', 'description', 'currentLevel', 'specificAreas', 'dailyTime', 'startDate', 'endDate'];
     const missingFields = requiredFields.filter(field => !req.body[field]);
     
     if (missingFields.length > 0) {
@@ -52,11 +52,11 @@ router.post('/', async (req, res) => {
     const goal = new Goal({
       title: req.body.title,
       description: req.body.description,
+      currentLevel: req.body.currentLevel,
+      specificAreas: req.body.specificAreas,
       dailyTime: req.body.dailyTime,
       startDate: new Date(req.body.startDate),
       endDate: new Date(req.body.endDate),
-      difficulty: req.body.difficulty,
-      progress: 0,
       tasks: []
     });
 
@@ -130,19 +130,23 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     console.log('Deleting goal:', req.params.id);
-    const goal = await Goal.findByIdAndDelete(req.params.id);
+    const goal = await Goal.findById(req.params.id);
     if (!goal) {
       console.log('Goal not found:', req.params.id);
       return res.status(404).json({ message: 'Goal not found' });
     }
+
+    // Delete all tasks associated with the goal
+    await Task.deleteMany({ goalId: goal._id });
+    
+    // Delete the goal
+    await goal.deleteOne();
+    
     console.log('Goal deleted successfully:', req.params.id);
-    res.json({ message: 'Goal deleted successfully' });
+    res.json({ message: 'Goal and associated tasks deleted successfully' });
   } catch (error) {
     console.error('Error deleting goal:', error);
-    res.status(400).json({ 
-      message: 'Error deleting goal', 
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    res.status(500).json({ message: 'Error deleting goal' });
   }
 });
 
@@ -154,51 +158,85 @@ router.post('/:id/generate-tasks', async (req, res) => {
       return res.status(404).json({ message: 'Goal not found' });
     }
 
+    // Delete existing tasks
+    await Task.deleteMany({ goalId: goal._id });
+    
+    // Generate new tasks
     const tasks = await generateDailyTasks(goal);
-    res.json(tasks);
+
+    // Populate tasks before sending response
+    const populatedGoal = await Goal.findById(goal._id)
+      .populate({
+        path: 'tasks',
+        model: 'Task',
+        options: { sort: { dueDate: 1 } }
+      });
+
+    if (!populatedGoal) {
+      throw new Error('Failed to find populated goal');
+    }
+
+    res.json(populatedGoal);
   } catch (error) {
     console.error('Error generating tasks:', error);
-    res.status(500).json({ message: 'Failed to generate tasks' });
+    res.status(500).json({ message: 'Error generating tasks' });
   }
 });
 
 // Get daily tasks for a goal
 router.get('/:id/tasks', async (req, res) => {
   try {
-    const tasks = await DailyTask.find({ goalId: req.params.id })
-      .sort({ dueDate: 1 });
+    const tasks = await Task.find({ goalId: req.params.id }).sort({ dueDate: 1 });
     res.json(tasks);
   } catch (error) {
     console.error('Error fetching tasks:', error);
-    res.status(500).json({ message: 'Failed to fetch tasks' });
+    res.status(500).json({ message: 'Error fetching tasks' });
+  }
+});
+
+// Delete a specific task
+router.delete('/tasks/:taskId', async (req, res) => {
+  try {
+    const task = await Task.findById(req.params.taskId);
+    if (!task) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+
+    // Remove task reference from goal
+    await Goal.findByIdAndUpdate(task.goalId, {
+      $pull: { tasks: task._id }
+    });
+
+    // Delete the task
+    await task.deleteOne();
+    
+    res.json({ message: 'Task deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting task:', error);
+    res.status(500).json({ message: 'Error deleting task' });
   }
 });
 
 // Update task status
-router.patch('/tasks/:taskId', async (req: Request, res: Response) => {
+router.patch('/tasks/:taskId', async (req, res) => {
   try {
-    const { taskId } = req.params;
-    const { status } = req.body;
-
-    if (!status || !['completed', 'skipped'].includes(status)) {
-      return res.status(400).json({ error: 'Invalid status. Must be either "completed" or "skipped"' });
-    }
-
-    const task = await Task.findById(taskId);
+    const task = await Task.findById(req.params.taskId);
     if (!task) {
-      return res.status(404).json({ error: 'Task not found' });
+      return res.status(404).json({ message: 'Task not found' });
     }
 
-    task.status = status;
-    if (status === 'completed') {
+    task.status = req.body.status;
+    if (req.body.status === 'completed') {
       task.completedAt = new Date();
+    } else {
+      task.completedAt = undefined;
     }
 
     await task.save();
     res.json(task);
   } catch (error) {
     console.error('Error updating task:', error);
-    res.status(500).json({ error: 'Failed to update task' });
+    res.status(500).json({ message: 'Error updating task' });
   }
 });
 
@@ -215,8 +253,7 @@ router.post('/generate-tasks', async (req, res) => {
     console.log('Goals without tasks:', goalsWithoutTasks.map(g => ({
       id: g._id,
       title: g.title,
-      dailyTime: g.dailyTime,
-      dailyTimeAvailable: g.dailyTimeAvailable
+      dailyTime: g.dailyTime
     })));
 
     const results = await Promise.all(
