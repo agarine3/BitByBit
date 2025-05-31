@@ -15,7 +15,6 @@ export async function generateTasks(goal: IGoal) {
     Title: ${goal.title}
     Description: ${goal.description}
     Daily Time: ${goal.dailyTime} minutes
-    Difficulty: ${goal.difficulty}
     Timeline: ${goal.startDate.toISOString().split('T')[0]} to ${goal.endDate.toISOString().split('T')[0]}
 
     Generate a structured plan that includes:
@@ -49,7 +48,6 @@ export async function generateDailyTasks(goal: IGoal) {
     Title: ${goal.title}
     Description: ${goal.description}
     Daily Time: ${goal.dailyTime} minutes
-    Difficulty: ${goal.difficulty}
     Timeline: ${goal.startDate.toISOString().split('T')[0]} to ${goal.endDate.toISOString().split('T')[0]}
 
     Generate 5 daily tasks that:

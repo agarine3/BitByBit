@@ -4,8 +4,9 @@ dotenv.config();
 import express from 'express';
 import cors from 'cors';
 import mongoose from 'mongoose';
-import goalRoutes from './routes/goals';
-import scheduleRoutes from './routes/schedule';
+import { ApolloServer } from '@apollo/server';
+import { expressMiddleware } from '@apollo/server/express4';
+import { typeDefs, resolvers } from './schema/schema';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -22,19 +23,24 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json());
 
+// Create Apollo Server
+const server = new ApolloServer({
+  typeDefs,
+  resolvers,
+});
+
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('Server error:', err);
   res.status(500).json({ message: 'Internal server error', error: err.message });
 });
 
-// Routes
-app.use('/api/goals', goalRoutes);
-app.use('/api/schedule', scheduleRoutes);
-
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok' });
+  res.json({ 
+    status: 'ok',
+    openai: process.env.OPENAI_API_KEY ? 'configured' : 'not configured'
+  });
 });
 
 // MongoDB connection
@@ -54,9 +60,20 @@ const connectDB = async () => {
 const startServer = async () => {
   try {
     await connectDB();
+    
+    // Start Apollo Server
+    await server.start();
+    
+    // Apply Apollo middleware
+    app.use('/graphql', expressMiddleware(server));
+    
     app.listen(PORT, () => {
       console.log(`Server is running on port ${PORT}`);
+      console.log(`GraphQL endpoint: http://localhost:${PORT}/graphql`);
       console.log(`Health check available at http://localhost:${PORT}/health`);
+      if (!process.env.OPENAI_API_KEY) {
+        console.warn('Warning: OPENAI_API_KEY is not configured. Task generation will use mock data.');
+      }
     });
   } catch (error) {
     console.error('Failed to start server:', error);

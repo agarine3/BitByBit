@@ -4,7 +4,7 @@ export interface IGoal extends Document {
   title: string;
   description: string;
   currentLevel: string;
-  specificAreas: string;
+  specificAreas: string[];
   dailyTime: number;
   startDate: Date;
   endDate: Date;
@@ -28,8 +28,9 @@ const GoalSchema: Schema = new Schema({
     required: true
   },
   specificAreas: {
-    type: String,
-    required: true
+    type: [String],
+    required: true,
+    default: []
   },
   dailyTime: {
     type: Number,
