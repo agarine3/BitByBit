@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
 import { Card, List, Button, Typography, Space, Tag, Collapse, Modal, Alert, Spin } from 'antd';
-import { CheckCircleOutlined, ClockCircleOutlined, InfoCircleOutlined, BookOutlined, FileTextOutlined, LinkOutlined, DeleteOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
+import { CheckCircleOutlined, ClockCircleOutlined, InfoCircleOutlined, BookOutlined, LinkOutlined, DeleteOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, gql } from '@apollo/client';
 import { message } from 'antd';
 
 const { Title, Text, Paragraph } = Typography;
-const { Panel } = Collapse;
 const { confirm } = Modal;
 
 const GET_TASKS = gql`

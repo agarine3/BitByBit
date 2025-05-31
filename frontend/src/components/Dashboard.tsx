@@ -90,7 +90,7 @@ interface Goal {
 const Dashboard: React.FC = () => {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [isCreatingGoal, setIsCreatingGoal] = useState(false);
-  const { loading, error, data, refetch } = useQuery(GET_GOALS);
+  const { error, data, refetch } = useQuery(GET_GOALS);
   const [createGoal] = useMutation(CREATE_GOAL);
   const [deleteGoal] = useMutation(DELETE_GOAL);
 
@@ -104,7 +104,7 @@ const Dashboard: React.FC = () => {
     
     setIsCreatingGoal(true);
     try {
-      const { data } = await createGoal({
+      await createGoal({
         variables: {
           ...values,
           specificAreas: values.specificAreas.split(',').map((area: string) => area.trim()),
